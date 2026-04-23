@@ -37,6 +37,11 @@ static const char* TokenKind_strings[] = {
 
 typedef struct Token {
     TokenKind kind;
+
+    /*
+        Difference between disired value and current value of the cell.
+    */
+    int diff;
 } Token;
 
 /*
