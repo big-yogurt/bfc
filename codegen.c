@@ -55,22 +55,26 @@ static void _gen_command(FILE* fd, AstNode* node)
 
     switch (node->kind) {
         case AstNodeKind_INC:
-            fprintf(fd, "    add byte[tape+rbx], 1\n");
+            fprintf(fd, "    add byte[tape+rbx], %d\n", node->diff);
             break;
         case AstNodeKind_DEC:
-            fprintf(fd, "    sub byte[tape+rbx], 1\n");
+            fprintf(fd, "    sub byte[tape+rbx], %d\n", node->diff);
             break;
         case AstNodeKind_NEXT:
-            fprintf(fd, "    inc rbx\n");
+            fprintf(fd, "    add rbx, %d\n", node->diff);
             break;
         case AstNodeKind_BACK:
-            fprintf(fd, "    dec rbx\n");
+            fprintf(fd, "    sub rbx, %d\n", node->diff);
             break;
         case AstNodeKind_IN:
-            fprintf(fd, "    call input\n");
+            for (size_t i = 0; i < node->diff; ++i) {
+                fprintf(fd, "    call input\n");
+            }
             break;
         case AstNodeKind_OUT:
-            fprintf(fd, "    call print\n");
+            for (size_t i = 0; i < node->diff; ++i) {
+                fprintf(fd, "    call print\n");
+            }
             break;
     }
 }
