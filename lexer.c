@@ -118,9 +118,10 @@ Token Lexer_next_tok(Lexer* l)
     panic_if(NULL == l, "Lexer_next_tok(): Lexer cannot be NULL");
     panic_if(NULL == l->fd, "Lexer_next_tok(): fd cannot be NULL");
 
-    Token tok;
-
 start_tokenize:
+    Token tok = {0};
+    tok.diff = 1;
+
     char ch = Lexer__read_char(l);
     if (l->has_err) {
         tok.kind = TokenKind_ERR;
@@ -180,6 +181,11 @@ start_tokenize:
             eprintf("error: Undefined symbol '%c' (%d) \n", ch, ch);
             break;
     } 
+
+    // Skip the token if it doesn't have effect on state
+    if (0 == tok.diff) {
+        goto start_tokenize;
+    }
 
     return tok;
 }
