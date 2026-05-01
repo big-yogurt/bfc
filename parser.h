@@ -20,6 +20,9 @@ typedef enum AstNodeKind {
 typedef struct AstNode {
    AstNodeKind kind;
 
+   // Field from Token
+   int diff;
+
    // Childs
    struct AstNode** items;
    size_t cap; // Capacity of items

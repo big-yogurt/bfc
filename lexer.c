@@ -40,6 +40,26 @@ static int Lexer__read_char(Lexer* l)
 }
 
 /*
+    Peek one character from source.
+
+    Arguments:
+        l - Pointer to lexer.
+
+    Return:
+        Next read character.
+        Set has_err on error.
+*/
+static int Lexer__peek_char(Lexer* l)
+{
+    panic_if(NULL == l, "Lexer__peek_char(): Lexer cannot be NULL");
+    panic_if(NULL == l->fd, "Lexer__peek_char(): fd cannot be NULL");
+
+    int ch = Lexer__read_char(l);
+    ungetc(ch, l->fd);
+    return ch;
+}
+
+/*
     Skip line. Use for skip comments.
 
     Arguments:
@@ -59,14 +79,65 @@ static void Lexer__skip_line(Lexer* l)
     );
 }
 
+/*
+    Merge sequence of commands.
+
+    Example:
+        '++++' ->  Token {.kind = TokenKind_INC, .diff = 4}
+        '++-+' ->  Token {.kind = TokenKind_INC, .diff = 2}
+        '..' ->    Token {.kind = TokenKind_DOT, .diff = 2}
+        '>>>>>' -> Token {.kind = TokenKind_R_AB, .diff = 5}
+
+    Arguments:
+        l - Pointer to lexer. Cannot be NULL.
+        diff - Pointer to the field .kind in the Token.
+        inc_diff_command - command for increment diff value. 0 - command not set.
+        dec_diff_command - command for decrement diff value. 0 - command not set.
+
+*/
+static void Lexer__merge_sequence(Lexer* l, Token* tok, char inc_diff_cmd,
+    char dec_diff_cmd)
+{
+    panic_if(NULL == l, "Lexer__merge_sequence(): Lexer cannot be NULL");
+
+    while (true) {
+        int ch = Lexer__peek_char(l);
+        if (inc_diff_cmd != 0 && inc_diff_cmd == ch) {
+            tok->diff += 1;
+        } else if (dec_diff_cmd != 0 && dec_diff_cmd == ch) {
+            tok->diff -= 1;
+        } else {
+            if (ch == '/') { // Skip comment
+                Lexer__read_char(l);
+                ch = Lexer__read_char(l);
+                if (ch != '/') {
+                    tok->kind = TokenKind_ERR;
+                    tok->diff = 1;
+                    l->has_err = true;
+                    eprintf("error: Expected comment\n");
+                    return;
+                }
+                Lexer__skip_line(l);
+                continue;
+            } else if (ch == ' ') {
+                Lexer__read_char(l);
+                continue;
+            }
+            break;
+        }
+        Lexer__read_char(l); // Skip
+    }
+}
+
 Token Lexer_next_tok(Lexer* l)
 {
     panic_if(NULL == l, "Lexer_next_tok(): Lexer cannot be NULL");
     panic_if(NULL == l->fd, "Lexer_next_tok(): fd cannot be NULL");
 
-    Token tok;
-
 start_tokenize:
+    Token tok = {0};
+    tok.diff = 1;
+
     char ch = Lexer__read_char(l);
     if (l->has_err) {
         tok.kind = TokenKind_ERR;
@@ -79,15 +150,19 @@ start_tokenize:
             break;
         case '+':
             tok.kind = TokenKind_PLUS;
+            Lexer__merge_sequence(l, &tok, '+', '-');
             break;
         case '-':
             tok.kind = TokenKind_MINUS;
+            Lexer__merge_sequence(l, &tok, '-', '+');
             break;
         case '<':
             tok.kind = TokenKind_L_AB;
+            Lexer__merge_sequence(l, &tok, '<', '>');
             break;
         case '>':
             tok.kind = TokenKind_R_AB;
+            Lexer__merge_sequence(l, &tok, '>', '<');
             break;
         case '[':
             tok.kind = TokenKind_L_B;
@@ -97,13 +172,16 @@ start_tokenize:
             break;
         case ',':
             tok.kind = TokenKind_COMMA;
+            Lexer__merge_sequence(l, &tok, ',', 0);
             break;
         case '.':
             tok.kind = TokenKind_DOT;
+            Lexer__merge_sequence(l, &tok, '.', 0);
             break;
         case '/': {
             int ch = Lexer__read_char(l);
             if (ch != '/') {
+                l->has_err = true;
                 tok.kind = TokenKind_ERR;
                 eprintf("error: Expected comment\n");
                 break;
@@ -120,6 +198,11 @@ start_tokenize:
             eprintf("error: Undefined symbol '%c' (%d) \n", ch, ch);
             break;
     } 
+
+    // Skip the token if it doesn't have effect on state
+    if (0 == tok.diff) {
+        goto start_tokenize;
+    }
 
     return tok;
 }

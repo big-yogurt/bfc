@@ -109,6 +109,7 @@ static AstNode* Parser__parse_command(Parser* p)
             break;
         }
     }
+    command->diff = tok.diff;
 
     return command;
 }
