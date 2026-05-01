@@ -95,18 +95,34 @@ static void Lexer__skip_line(Lexer* l)
         dec_diff_command - command for decrement diff value. 0 - command not set.
 
 */
-static void Lexer__merge_sequence(Lexer* l, int* diff, char inc_diff_cmd,
+static void Lexer__merge_sequence(Lexer* l, Token* tok, char inc_diff_cmd,
     char dec_diff_cmd)
 {
     panic_if(NULL == l, "Lexer__merge_sequence(): Lexer cannot be NULL");
 
     while (true) {
-        char ch = Lexer__peek_char(l);
+        int ch = Lexer__peek_char(l);
         if (inc_diff_cmd != 0 && inc_diff_cmd == ch) {
-            *diff += 1;
+            tok->diff += 1;
         } else if (dec_diff_cmd != 0 && dec_diff_cmd == ch) {
-            *diff -= 1;
+            tok->diff -= 1;
         } else {
+            if (ch == '/') { // Skip comment
+                Lexer__read_char(l);
+                ch = Lexer__read_char(l);
+                if (ch != '/') {
+                    tok->kind = TokenKind_ERR;
+                    tok->diff = 1;
+                    l->has_err = true;
+                    eprintf("error: Expected comment\n");
+                    return;
+                }
+                Lexer__skip_line(l);
+                continue;
+            } else if (ch == ' ') {
+                Lexer__read_char(l);
+                continue;
+            }
             break;
         }
         Lexer__read_char(l); // Skip
@@ -134,19 +150,19 @@ start_tokenize:
             break;
         case '+':
             tok.kind = TokenKind_PLUS;
-            Lexer__merge_sequence(l, &tok.diff, '+', '-');
+            Lexer__merge_sequence(l, &tok, '+', '-');
             break;
         case '-':
             tok.kind = TokenKind_MINUS;
-            Lexer__merge_sequence(l, &tok.diff, '-', '+');
+            Lexer__merge_sequence(l, &tok, '-', '+');
             break;
         case '<':
             tok.kind = TokenKind_L_AB;
-            Lexer__merge_sequence(l, &tok.diff, '<', '>');
+            Lexer__merge_sequence(l, &tok, '<', '>');
             break;
         case '>':
             tok.kind = TokenKind_R_AB;
-            Lexer__merge_sequence(l, &tok.diff, '>', '<');
+            Lexer__merge_sequence(l, &tok, '>', '<');
             break;
         case '[':
             tok.kind = TokenKind_L_B;
@@ -156,15 +172,16 @@ start_tokenize:
             break;
         case ',':
             tok.kind = TokenKind_COMMA;
-            Lexer__merge_sequence(l, &tok.diff, ',', 0);
+            Lexer__merge_sequence(l, &tok, ',', 0);
             break;
         case '.':
             tok.kind = TokenKind_DOT;
-            Lexer__merge_sequence(l, &tok.diff, '.', 0);
+            Lexer__merge_sequence(l, &tok, '.', 0);
             break;
         case '/': {
             int ch = Lexer__read_char(l);
             if (ch != '/') {
+                l->has_err = true;
                 tok.kind = TokenKind_ERR;
                 eprintf("error: Expected comment\n");
                 break;

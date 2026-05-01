@@ -154,7 +154,6 @@ int main(void)
             "Test errors",
             "+/",
             (Token[]) {
-                {TokenKind_PLUS, 1},
                 {TokenKind_ERR, 1}
             }
         },
